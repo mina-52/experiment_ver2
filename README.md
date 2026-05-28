@@ -27,9 +27,13 @@
 
 ## 環境構築
 
-**必要なソフトウェアは「Processing」1つだけです（無料）。**
+実行方法は **Processing IDE を直接使う方法** と **VS Code から実行する方法** の2種類があります。
 
-### 手順
+---
+
+### 方法A：Processing IDE で実行（シンプル）
+
+**必要なソフトウェアは「Processing」1つだけです（無料）。**
 
 **① Processing をダウンロード**
 
@@ -55,6 +59,95 @@ experiment_ver2/original/e1/s1v2/s1v2.pde
 > **注意：データ保存先フォルダについて**
 > シミュレーション結果は `s1v2/` の一つ上にある `data/e1/must0.0/` 等に保存されます。
 > フォルダが存在しないとエラーになるため、**実行前に対応するフォルダを作成**してください。
+
+---
+
+### 方法B：VS Code から実行
+
+コードを VS Code で編集しながらそのまま実行できます。
+
+#### 必要なもの
+
+| ソフトウェア | 入手先 |
+|---|---|
+| Processing（本体） | https://processing.org/download |
+| VS Code | https://code.visualstudio.com |
+| VS Code 拡張機能「Processing Language」 | VS Code 内の拡張機能タブで検索 |
+
+#### セットアップ手順
+
+**① `processing-java` コマンドを有効にする**
+
+Processing IDE を開き、メニューから以下を選択します。
+
+```
+ツール（Tools）→ processing-java をインストール（Install "processing-java"）
+```
+
+> これにより、ターミナルから `processing-java` コマンドが使えるようになります。
+
+**② VS Code に Processing 拡張機能をインストールする**
+
+1. VS Code を開く
+2. 左サイドバーの拡張機能アイコン（四角いブロックのマーク）をクリック
+3. 検索欄に `Processing Language` と入力
+4. **Tobiah.language-pde** をインストール
+
+> シンタックスハイライト（コードの色付け）と自動補完が使えるようになります。
+
+**③ VS Code のタスクを設定する**
+
+プロジェクトルートに `.vscode/tasks.json` を作成し、以下の内容を貼り付けます。
+
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Processing: シミュレーション実行",
+      "type": "shell",
+      "command": "processing-java",
+      "args": [
+        "--sketch=${workspaceFolder}/original/e1/s1v2",
+        "--run"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
+```
+
+**④ VS Code からシミュレーションを実行する**
+
+設定後は以下のいずれかの方法で実行できます。
+
+| 方法 | 操作 |
+|---|---|
+| キーボードショートカット | `Ctrl + Shift + B` |
+| コマンドパレット | `Ctrl + Shift + P` → `Tasks: Run Build Task` |
+| メニュー | ターミナル → タスクの実行 → `Processing: シミュレーション実行` |
+
+```
+VS Code の操作例：
+
+  Ctrl + Shift + B を押す
+         ↓
+  ターミナルに以下が表示される：
+  > processing-java --sketch=.../s1v2 --run
+         ↓
+  シミュレーション画面が起動する
+```
+
+> **補足：** `processing-java` にパスが通っていない場合は、フルパスを指定してください。
+> 例：`"command": "C:/Users/ユーザー名/AppData/Local/Processing/processing-java.exe"`
 
 ---
 
