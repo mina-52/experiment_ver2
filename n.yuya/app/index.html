@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RiceLodge Studio ― 倒伏シミュレーター</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🌾</span>
+    <div>
+      <h1>RiceLodge&nbsp;Studio</h1>
+      <p class="tagline">作物倒伏 ビジュアルシミュレーター</p>
+    </div>
+  </div>
+  <div class="playback">
+    <button id="btnPlay" class="btn primary">▶ 再生</button>
+    <button id="btnStep" class="btn">⏭ コマ送り</button>
+    <button id="btnReset" class="btn">⟲ リセット</button>
+    <label class="speed">
+      速度 <input type="range" id="speed" min="0.2" max="3" step="0.1" value="1">
+      <span id="speedVal">1.0×</span>
+    </label>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左：パラメータ操作 -->
+  <aside class="panel controls">
+    <div class="panel-head">
+      <h2>条件設定</h2>
+      <select id="preset" title="シナリオプリセット">
+        <option value="">― プリセットを選択 ―</option>
+        <optgroup label="天候シナリオ">
+          <option value="calm">晴天・微風</option>
+          <option value="normal">通常の風</option>
+          <option value="strong">強風注意報</option>
+          <option value="typhoon">台風直撃</option>
+          <option value="downpour">ゲリラ豪雨＋突風</option>
+        </optgroup>
+        <optgroup label="品種・栽培">
+          <option value="koshi">コシヒカリ（良食味・倒伏弱）</option>
+          <option value="strongculm">強稈品種（倒伏耐性）</option>
+          <option value="overfert">多肥栽培（徒長）</option>
+          <option value="dense">密植栽培</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="group" data-group="作物">
+      <h3>🌱 作物の特性</h3>
+      <div class="ctl"><label>茎強度 <span class="hint">折れにくさ</span></label>
+        <input type="range" id="stemStrength" min="1" max="10" step="0.1" value="5">
+        <output id="stemStrength_v"></output></div>
+      <div class="ctl"><label>稈長 <span class="hint">草丈・高いほど倒れやすい</span></label>
+        <input type="range" id="culmLength" min="60" max="140" step="1" value="90">
+        <output id="culmLength_v"></output></div>
+      <div class="ctl"><label>株あたり茎数</label>
+        <input type="range" id="tillers" min="5" max="35" step="1" value="18">
+        <output id="tillers_v"></output></div>
+      <div class="ctl"><label>株間隔 <span class="hint">cm</span></label>
+        <input type="range" id="spacing" min="10" max="30" step="1" value="18">
+        <output id="spacing_v"></output></div>
+      <div class="ctl"><label>生育ステージ <span class="hint">出穂→完熟（穂重）</span></label>
+        <input type="range" id="growth" min="0" max="1" step="0.05" value="0.7">
+        <output id="growth_v"></output></div>
+    </div>
+
+    <div class="group" data-group="栽培">
+      <h3>🧪 栽培管理</h3>
+      <div class="ctl"><label>窒素施肥 <span class="hint">多いほど徒長・軟弱</span></label>
+        <input type="range" id="nitrogen" min="0" max="1" step="0.05" value="0.5">
+        <output id="nitrogen_v"></output></div>
+      <div class="ctl"><label>土壌水分 <span class="hint">高いほど根が浮く</span></label>
+        <input type="range" id="soilMoisture" min="0" max="1" step="0.05" value="0.4">
+        <output id="soilMoisture_v"></output></div>
+    </div>
+
+    <div class="group" data-group="天候">
+      <h3>🌬 気象条件</h3>
+      <div class="ctl"><label>平均風速 <span class="hint">m/s</span></label>
+        <input type="range" id="windSpeed" min="0" max="40" step="0.5" value="8">
+        <output id="windSpeed_v"></output></div>
+      <div class="ctl"><label>突風度</label>
+        <input type="range" id="gustiness" min="0" max="1" step="0.05" value="0.6">
+        <output id="gustiness_v"></output></div>
+      <div class="ctl"><label>風向</label>
+        <input type="range" id="windDir" min="0" max="360" step="5" value="90">
+        <output id="windDir_v"></output></div>
+      <div class="ctl"><label>降雨量 <span class="hint">mm/h</span></label>
+        <input type="range" id="rainfall" min="0" max="80" step="1" value="0">
+        <output id="rainfall_v"></output></div>
+    </div>
+
+    <div class="group" data-group="初期">
+      <h3>⚙ 初期・規模</h3>
+      <div class="ctl"><label>初期倒伏角 <span class="hint">deg</span></label>
+        <input type="range" id="initLodge" min="0" max="45" step="1" value="0">
+        <output id="initLodge_v"></output></div>
+      <div class="ctl"><label>圃場サイズ <span class="hint">株/辺</span></label>
+        <input type="range" id="grid" min="8" max="34" step="1" value="22">
+        <output id="grid_v"></output></div>
+    </div>
+  </aside>
+
+  <!-- 中央：圃場ビュー -->
+  <section class="stage">
+    <div class="canvas-wrap">
+      <canvas id="field"></canvas>
+      <div id="verdict" class="verdict safe">倒伏リスク評価</div>
+    </div>
+  </section>
+
+  <!-- 右：計測ダッシュボード -->
+  <aside class="panel dashboard">
+    <h2>計測ダッシュボード</h2>
+
+    <div class="bigstat">
+      <div class="bignum"><span id="lodgeRate">0.0</span><small>%</small></div>
+      <div class="biglabel">倒伏率（45°以上）</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat"><span id="meanLean">0.0°</span><label>平均傾斜</label></div>
+      <div class="stat"><span id="brokenRate">0.0%</span><label>折損率</label></div>
+      <div class="stat"><span id="windNow">0.0</span><label>瞬間風速 m/s</label></div>
+      <div class="stat"><span id="frame">0</span><label>経過フレーム</label></div>
+    </div>
+
+    <h3>倒伏度の分布</h3>
+    <div class="zonebars" id="zonebars"></div>
+
+    <h3>倒伏率の推移</h3>
+    <canvas id="chart" class="chart"></canvas>
+
+    <div class="export">
+      <button id="btnCsv" class="btn">⬇ CSVエクスポート</button>
+      <button id="btnSnap" class="btn">📷 画像保存</button>
+    </div>
+    <p class="credit">物理モデル: 曲げモーメント vs 稈の折損強度に基づく倒伏判定</p>
+  </aside>
+</main>
+
+<script src="sim.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
