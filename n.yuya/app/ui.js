@@ -22,8 +22,11 @@
     gustiness:    v => `${Math.round(v * 100)} %`,
     windDir:      v => `${v}°`,
     rainfall:     v => `${v} mm/h`,
+    shelter:      v => `${Math.round(v * 100)} %`,
+    contagion:    v => `${Math.round(v * 100)} %`,
     initLodge:    v => `${v}°`,
     grid:         v => `${v}×${v}`,
+    scatterVar:   v => `${Math.round(v * 100)} %`,
   };
 
   function bindSlider(id, fmt) {
@@ -41,9 +44,21 @@
   }
   Object.entries(sliders).forEach(([id, fmt]) => bindSlider(id, fmt));
 
-  /* --- プリセット ---------------------------------------------------- */
+  /* --- 植付方式セレクト（規則植え / ドローン散播） ------------------- */
+  const sowingSel = document.getElementById('sowing');
+  const scatterRow = document.getElementById('scatterVarRow');
+  function applySowing() {
+    sim.set('sowing', sowingSel.value);
+    // 散播ムラは「ドローン散播」のときだけ意味を持つ
+    scatterRow.classList.toggle('disabled', sowingSel.value !== 'random');
+    if (!sim.running) sim.draw();
+  }
+  sowingSel.addEventListener('change', applySowing);
+  applySowing();
+
+  /* --- プリセット（天候・品種・播種を独立して選択） ----------------- */
   const presets = {
-    // 天候
+    // 天候シナリオ
     calm:    { windSpeed: 3,  gustiness: 0.2, rainfall: 0,  windDir: 90 },
     normal:  { windSpeed: 8,  gustiness: 0.5, rainfall: 0 },
     strong:  { windSpeed: 18, gustiness: 0.7, rainfall: 5 },
@@ -54,16 +69,27 @@
     strongculm:{ stemStrength: 8.0, culmLength: 78,  nitrogen: 0.4, tillers: 16 },
     overfert:  { stemStrength: 4.0, culmLength: 120, nitrogen: 0.95, tillers: 28, growth: 0.8 },
     dense:     { spacing: 11, tillers: 30, culmLength: 100, nitrogen: 0.7 },
+    // 播種方式
+    transplant:{ sowing: 'grid' },
+    drone:     { sowing: 'random', scatterVar: 0.6 },
+    dronerough:{ sowing: 'random', scatterVar: 0.95 },
   };
 
-  document.getElementById('preset').addEventListener('change', e => {
-    const p = presets[e.target.value];
+  // 各プリセットは「自分の項目だけ」を上書きし、他カテゴリの設定は保持する
+  function applyPreset(name) {
+    const p = presets[name];
     if (!p) return;
     for (const [k, v] of Object.entries(p)) {
       const el = document.getElementById(k);
-      if (el) { el.value = v; el.dispatchEvent(new Event('input')); }
+      if (!el) continue;
+      el.value = v;
+      el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input'));
     }
     sim.reset();
+  }
+  ['presetWeather', 'presetVariety', 'presetSowing'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.addEventListener('change', e => applyPreset(e.target.value));
   });
 
   /* --- 再生制御 ------------------------------------------------------ */
