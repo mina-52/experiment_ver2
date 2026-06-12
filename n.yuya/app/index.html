@@ -31,22 +31,38 @@
   <aside class="panel controls">
     <div class="panel-head">
       <h2>条件設定</h2>
-      <select id="preset" title="シナリオプリセット">
-        <option value="">― プリセットを選択 ―</option>
-        <optgroup label="天候シナリオ">
-          <option value="calm">晴天・微風</option>
-          <option value="normal">通常の風</option>
-          <option value="strong">強風注意報</option>
-          <option value="typhoon">台風直撃</option>
-          <option value="downpour">ゲリラ豪雨＋突風</option>
-        </optgroup>
-        <optgroup label="品種・栽培">
-          <option value="koshi">コシヒカリ（良食味・倒伏弱）</option>
-          <option value="strongculm">強稈品種（倒伏耐性）</option>
-          <option value="overfert">多肥栽培（徒長）</option>
-          <option value="dense">密植栽培</option>
-        </optgroup>
-      </select>
+      <div class="presets">
+        <label class="preset-row">
+          <span>🌬 天候シナリオ</span>
+          <select id="presetWeather" title="天候シナリオ">
+            <option value="">― 選択 ―</option>
+            <option value="calm">晴天・微風</option>
+            <option value="normal">通常の風</option>
+            <option value="strong">強風注意報</option>
+            <option value="typhoon">台風直撃</option>
+            <option value="downpour">ゲリラ豪雨＋突風</option>
+          </select>
+        </label>
+        <label class="preset-row">
+          <span>🌱 品種・栽培</span>
+          <select id="presetVariety" title="品種・栽培">
+            <option value="">― 選択 ―</option>
+            <option value="koshi">コシヒカリ（良食味・倒伏弱）</option>
+            <option value="strongculm">強稈品種（倒伏耐性）</option>
+            <option value="overfert">多肥栽培（徒長）</option>
+            <option value="dense">密植栽培</option>
+          </select>
+        </label>
+        <label class="preset-row">
+          <span>🌾 播種方式</span>
+          <select id="presetSowing" title="播種方式">
+            <option value="">― 選択 ―</option>
+            <option value="transplant">規則的（田植え・整列）</option>
+            <option value="drone">ドローン散播（標準ムラ）</option>
+            <option value="dronerough">ドローン散播（ムラ大・裸地あり）</option>
+          </select>
+        </label>
+      </div>
     </div>
 
     <div class="group" data-group="作物">
@@ -66,6 +82,18 @@
       <div class="ctl"><label>生育ステージ <span class="hint">出穂→完熟（穂重）</span></label>
         <input type="range" id="growth" min="0" max="1" step="0.05" value="0.7">
         <output id="growth_v"></output></div>
+    </div>
+
+    <div class="group" data-group="播種">
+      <h3>🌾 播種・植付方式</h3>
+      <div class="ctl"><label>植付方式 <span class="hint">整列植え or ドローン散播</span></label>
+        <select id="sowing">
+          <option value="grid">規則的（田植え・整列）</option>
+          <option value="random">ドローン散播（ランダム）</option>
+        </select></div>
+      <div class="ctl" id="scatterVarRow"><label>散播ムラ <span class="hint">密度ムラ（濃淡・裸地）の強さ</span></label>
+        <input type="range" id="scatterVar" min="0" max="1" step="0.05" value="0.5">
+        <output id="scatterVar_v"></output></div>
     </div>
 
     <div class="group" data-group="栽培">
@@ -92,6 +120,16 @@
       <div class="ctl"><label>降雨量 <span class="hint">mm/h</span></label>
         <input type="range" id="rainfall" min="0" max="80" step="1" value="0">
         <output id="rainfall_v"></output></div>
+    </div>
+
+    <div class="group" data-group="相互作用">
+      <h3>🔗 株間の相互作用</h3>
+      <div class="ctl"><label>風よけ効果 <span class="hint">風上の株が風を遮る</span></label>
+        <input type="range" id="shelter" min="0" max="2" step="0.05" value="1">
+        <output id="shelter_v"></output></div>
+      <div class="ctl"><label>寄りかかり連鎖 <span class="hint">風下へ倒伏が伝播</span></label>
+        <input type="range" id="contagion" min="0" max="2" step="0.05" value="1">
+        <output id="contagion_v"></output></div>
     </div>
 
     <div class="group" data-group="初期">

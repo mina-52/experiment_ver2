@@ -51,7 +51,13 @@ class Clump {
     this.cx = cx;
     this.cy = cy;
     this.stems = [];
-    this.lean = 0; // 株全体の平均倒伏(隣接影響用キャッシュ)
+    this.lean = 0;       // 株全体の平均倒伏角(隣接影響用キャッシュ)
+    this.lvx = 0;        // 倒れ込みベクトル(水平投影)の平均 X
+    this.lvy = 0;        //   〃                               Y
+    this.shelter = 0;    // 風よけ係数 0(露出)〜0.5(遮蔽)
+    this.windLocal = 0;  // この株が実際に受ける局所風速
+    this.leanLoad = 0;   // 風上の倒伏株から受ける寄りかかり荷重
+    this.neighbors = []; // {o,dist,ux,uy,w} 近傍株と幾何情報
   }
 }
 
@@ -75,9 +81,13 @@ class LodgingSim {
       nitrogen: 0.5,       // 窒素施肥レベル 0-1（高いほど徒長・軟弱）
       growth: 0.7,         // 生育ステージ 0(出穂)-1(完熟) → 穂重
       soilMoisture: 0.4,   // 土壌水分 0-1（高いほど根の支持力低下）
+      shelter: 1.0,        // 風よけ(フェッチ)効果の強さ 0-2
+      contagion: 1.0,      // 風下への寄りかかり連鎖の強さ 0-2
       initLodge: 0,        // 初期倒伏角 deg
       speed: 1.0,          // シミュレーション速度倍率
       grid: 22,            // 一辺の株数
+      sowing: 'grid',      // 植付方式 'grid'=規則的(田植え) / 'random'=ドローン散播
+      scatterVar: 0.5,     // 散播ムラ 0-1（ドローン散播時の密度ムラの強さ）
     };
 
     this.time = 0;         // 経過フレーム
@@ -96,7 +106,8 @@ class LodgingSim {
   set(key, value) {
     this.params[key] = value;
     if (key === 'grid' || key === 'spacing' || key === 'tillers' ||
-        key === 'stemStrength' || key === 'strengthVar' || key === 'initLodge') {
+        key === 'stemStrength' || key === 'strengthVar' || key === 'initLodge' ||
+        key === 'sowing' || key === 'scatterVar') {
       this._buildField();
       this._resize();
     }
@@ -113,28 +124,103 @@ class LodgingSim {
     return v;
   }
 
+  /* --- 標準正規乱数(平均0,分散1) ----------------------------------- */
+  _randn() {
+    const u1 = Math.random() || 1e-9, u2 = Math.random();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  /* --- 株の植付位置を決める ----------------------------------------
+   * 'grid'   : 規則的な田植え(整列・等間隔)
+   * 'random' : ドローン散播(不規則な間隔)。平均密度は規則植えと揃え、
+   *            scatterVar で密度ムラ(塊状の濃淡・裸地)の強さを調整する。
+   * ---------------------------------------------------------------- */
+  _sowPositions() {
+    const p = this.params, g = p.grid;
+    const pos = [];
+    if (p.sowing !== 'random') {
+      for (let i = 0; i < g; i++)
+        for (let j = 0; j < g; j++)
+          pos.push([i + 0.5, j + 0.5]); // 正規化座標(0..grid)
+      return pos;
+    }
+    // ドローン散播: クラスタ中心の周りにガウス散布する混合モデル。
+    // scatterVar=0 → 中心が多く分散小 ≒ 一様ランダム(緩やかなムラ)
+    // scatterVar=1 → 中心が少なく分散大 → 強い塊状ムラ(濃い所と裸地)
+    const N = g * g;                       // 総株数(平均密度は規則植えと同等)
+    const v = p.scatterVar;
+    const nClusters = Math.max(1, Math.round(N * (0.15 + 0.85 * (1 - v))));
+    const sigma = 0.35 + v * 1.6;
+    const centers = [];
+    for (let c = 0; c < nClusters; c++)
+      centers.push([Math.random() * g, Math.random() * g]);
+    for (let k = 0; k < N; k++) {
+      const c = centers[(Math.random() * nClusters) | 0];
+      let x = c[0] + this._randn() * sigma;
+      let y = c[1] + this._randn() * sigma;
+      x = Math.min(g - 0.02, Math.max(0.02, x));
+      y = Math.min(g - 0.02, Math.max(0.02, y));
+      pos.push([x, y]);
+    }
+    return pos;
+  }
+
   /* --- 圃場(株・茎)の生成 ------------------------------------------ */
   _buildField() {
     const p = this.params;
     this.clumps = [];
     const innerR = 8; // 株内の茎ばらまき半径(描画用)
-    for (let i = 0; i < p.grid; i++) {
-      for (let j = 0; j < p.grid; j++) {
-        const cx = i + 0.5, cy = j + 0.5; // 正規化座標(0..grid)
-        const clump = new Clump(cx, cy);
-        for (let k = 0; k < p.tillers; k++) {
-          const a = Math.random() * Math.PI * 2;
-          const r = Math.random() * innerR;
-          const strength = this._gauss(p.stemStrength, p.strengthVar);
-          const s = new Stem(cx, cy, Math.cos(a) * r, Math.sin(a) * r, strength);
-          s.theta = p.initLodge + Math.random() * 2;
-          s.dir = p.windDir * DEG + (Math.random() - 0.5) * 0.6;
-          clump.stems.push(s);
-        }
-        this.clumps.push(clump);
+    for (const [cx, cy] of this._sowPositions()) {
+      const clump = new Clump(cx, cy);
+      for (let k = 0; k < p.tillers; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * innerR;
+        const strength = this._gauss(p.stemStrength, p.strengthVar);
+        const s = new Stem(cx, cy, Math.cos(a) * r, Math.sin(a) * r, strength);
+        s.theta = p.initLodge + Math.random() * 2;
+        s.dir = p.windDir * DEG + (Math.random() - 0.5) * 0.6;
+        clump.stems.push(s);
       }
+      this.clumps.push(clump);
     }
     this.totalStems = this.clumps.length * p.tillers;
+    this._buildNeighbors();
+  }
+
+  /* --- 近傍株リストの構築(寄りかかり影響用) -------------------------
+   * 規則植え・散播のどちらでも、空間的に近い株どうしを近傍とする。
+   * 空間ハッシュ(セルサイズ1)で O(N) 近傍探索する。
+   * ---------------------------------------------------------------- */
+  _buildNeighbors() {
+    const radius = 1.6, r2 = radius * radius;
+    const cells = new Map();
+    const key = (ix, iy) => ix + ',' + iy;
+    this.clumps.forEach((c, idx) => {
+      const k = key(Math.floor(c.cx), Math.floor(c.cy));
+      (cells.get(k) || cells.set(k, []).get(k)).push(idx);
+    });
+    for (const c of this.clumps) {
+      c.neighbors = [];
+      const ix = Math.floor(c.cx), iy = Math.floor(c.cy);
+      for (let dx = -2; dx <= 2; dx++)
+        for (let dy = -2; dy <= 2; dy++) {
+          const arr = cells.get(key(ix + dx, iy + dy));
+          if (!arr) continue;
+          for (const idx of arr) {
+            const o = this.clumps[idx];
+            if (o === c) continue;
+            const ddx = o.cx - c.cx, ddy = o.cy - c.cy;
+            const d2 = ddx * ddx + ddy * ddy;
+            if (d2 > r2) continue;
+            const dist = Math.sqrt(d2) || 1e-6;
+            // ux,uy: c→o の単位ベクトル。w: 近いほど大きい距離減衰重み。
+            c.neighbors.push({
+              o, dist, ux: ddx / dist, uy: ddy / dist,
+              w: Math.max(0, 1 - dist / radius),
+            });
+          }
+        }
+    }
   }
 
   reset() {
@@ -159,6 +245,35 @@ class LodgingSim {
     this.windEff = this.windNow * (1 + p.rainfall / 200);
   }
 
+  /* --- 株間の空間相互作用(風よけ＋風下への寄りかかり) ---------------
+   * 前ステップの倒伏状態をもとに、各株について
+   *  ・風よけ(フェッチ): 風上で直立している隣株が局所風を弱める。
+   *    風上の株が倒れると遮蔽が消え、風が貫通して風下へ倒伏が伝播する。
+   *  ・寄りかかり: 風上で倒れた株が、その倒れ込む向き(=風下)の隣株に
+   *    荷重を乗せる。距離が近いほど強い(距離減衰)。
+   * 風上/風下は「c→隣株ベクトルと風向の内積の符号」で判定する。
+   * ---------------------------------------------------------------- */
+  _computeEnvironment(windEff, wux, wuy) {
+    const p = this.params;
+    for (const c of this.clumps) {
+      let shelterRaw = 0, load = 0;
+      for (const nb of c.neighbors) {
+        const along = nb.ux * wux + nb.uy * wuy; // (c→隣株)・風向
+        if (along >= 0) continue;                // 風上側の隣株のみが影響源
+        const upw = -along;                       // 風上度 0..1
+        const o = nb.o;
+        // 風よけ: 風上で直立(cosθ大)している株ほど風を遮る
+        shelterRaw += upw * Math.max(0, Math.cos(o.lean * DEG)) * nb.w;
+        // 寄りかかり: 風上株の倒れ込みベクトルが c の方を向く成分
+        const proj = -(o.lvx * nb.ux + o.lvy * nb.uy);
+        if (proj > 0) load += proj * nb.w;
+      }
+      c.shelter = Math.min(0.5, shelterRaw * 0.7 * p.shelter);
+      c.windLocal = windEff * (1 - c.shelter);
+      c.leanLoad = load * p.contagion;
+    }
+  }
+
   /* --- 1ステップ更新 ------------------------------------------------ */
   step() {
     const p = this.params;
@@ -172,24 +287,32 @@ class LodgingSim {
     // 穂の自重モーメント係数（稈の弾性より小さく保ち、健全株は自立する）
     const Wself = (0.02 + p.growth * 0.035) * (1 + p.rainfall / 120) * L;
     const windDirRad = p.windDir * DEG;
-    const v = this.windEff;
-    const driveWind = Kw * v * v * L;                  // cos(theta) は各茎で乗じる
+    const wux = Math.cos(windDirRad), wuy = Math.sin(windDirRad);
     const GAIN = 5 * p.speed;
     const PLASTIC = 45;                                // 塑性限界角(永久倒伏)
+    const LEAN_COEF = 0.10;                            // 寄りかかり荷重→駆動の換算
+
+    // 空間相互作用(前ステップの倒伏状態に基づく:風よけ・寄りかかり)
+    this._computeEnvironment(this.windEff, wux, wuy);
 
     for (const clump of this.clumps) {
-      let leanSum = 0;
+      const vC = clump.windLocal;                      // 局所風(風よけ反映)
+      const driveWindC = Kw * vC * vC * L;             // cos(theta) は各茎で乗じる
+      const leanDrive = clump.leanLoad * LEAN_COEF;    // 風下への寄りかかり荷重
+      let leanSum = 0, lvx = 0, lvy = 0;
       for (const s of clump.stems) {
         if (s.broken) {
           // 折損・永久倒伏 → 完全に倒れ込み立ち上がらない
           s.theta = Math.min(90, s.theta + 2.2 * p.speed);
           s.dir += (windDirRad - s.dir) * 0.04;
           leanSum += s.theta;
+          const st = Math.sin(s.theta * DEG);
+          lvx += st * Math.cos(s.dir); lvy += st * Math.sin(s.dir);
           continue;
         }
         const thr = s.theta * DEG;
-        // 駆動モーメント = 風(倒すほど受風減) + 自重(傾くほど増)
-        const drive = driveWind * Math.cos(thr) + Wself * Math.sin(thr);
+        // 駆動 = 風(倒すほど受風減) + 自重(傾くほど増) + 風上からの寄りかかり
+        const drive = driveWindC * Math.cos(thr) + Wself * Math.sin(thr) + leanDrive;
         // 弾性復元モーメント = 稈の剛性(茎強度)×根の支持 × 曲げ角
         const kE = s.strength * 0.05 * stemWeak * rootFactor;
         const restore = kE * thr;                      // フックの法則的な復元
@@ -200,39 +323,17 @@ class LodgingSim {
         if (s.theta > PLASTIC) s.broken = true;        // 塑性変形→永久倒伏
         if (s.theta > 90) s.theta = 90;
         leanSum += s.theta;
+        const st = Math.sin(s.theta * DEG);            // 倒れ込みの水平投影
+        lvx += st * Math.cos(s.dir); lvy += st * Math.sin(s.dir);
       }
-      clump.lean = leanSum / clump.stems.length;
+      const n = clump.stems.length;
+      clump.lean = leanSum / n;
+      clump.lvx = lvx / n; clump.lvy = lvy / n;        // 次ステップの相互作用用
     }
-
-    // 隣接株の寄りかかり影響(倒れた株の隣はわずかに倒れやすい)
-    this._neighborInfluence();
 
     this.time++;
     if (this.time % 6 === 0) this._record();
     this._emitStats();
-  }
-
-  _neighborInfluence() {
-    const p = this.params, g = p.grid;
-    const at = (i, j) => this.clumps[i * g + j];
-    for (let i = 0; i < g; i++) {
-      for (let j = 0; j < g; j++) {
-        const c = at(i, j);
-        let push = 0, n = 0;
-        for (let di = -1; di <= 1; di++)
-          for (let dj = -1; dj <= 1; dj++) {
-            if (!di && !dj) continue;
-            const ni = i + di, nj = j + dj;
-            if (ni < 0 || nj < 0 || ni >= g || nj >= g) continue;
-            push += at(ni, nj).lean; n++;
-          }
-        const avg = n ? push / n : 0;
-        if (avg > c.lean + 20) {
-          for (const s of c.stems)
-            if (!s.broken) s.theta = Math.min(90, s.theta + (avg - c.lean) * 0.0008);
-        }
-      }
-    }
   }
 
   /* --- 統計 ---------------------------------------------------------- */

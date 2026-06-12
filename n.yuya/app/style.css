@@ -78,9 +78,13 @@ body {
 
 /* --- コントロール --- */
 .panel-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-#preset {
+.presets { display: flex; flex-direction: column; gap: 7px; }
+.preset-row { display: flex; flex-direction: column; gap: 3px; }
+.preset-row > span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.preset-row select {
   width: 100%; background: var(--panel-2); color: var(--text);
   border: 1px solid var(--line); border-radius: 8px; padding: 7px; font-size: 13px;
+  cursor: pointer;
 }
 .group { border-top: 1px solid var(--line); padding-top: 4px; }
 .group:first-of-type { border-top: none; }
@@ -109,6 +113,14 @@ input[type=range]::-moz-range-thumb {
   width: 15px; height: 15px; border-radius: 50%;
   background: var(--accent); cursor: pointer; border: 2px solid #0c1117;
 }
+
+.ctl select {
+  width: 100%; padding: 5px 8px; border-radius: 6px;
+  background: var(--line); color: inherit; font-size: 12.5px;
+  border: 1px solid rgba(255,255,255,0.12); outline: none; cursor: pointer;
+}
+/* 散播ムラなど、現在の方式では無効な操作はグレーアウト */
+.ctl.disabled { opacity: 0.4; pointer-events: none; }
 
 /* --- ステージ（圃場ビュー） --- */
 .stage { min-height: 0; display: flex; }
